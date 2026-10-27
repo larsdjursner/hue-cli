@@ -1,0 +1,87 @@
+#!/bin/sh
+# A short light show on the two table lamps, never above 60%.
+# Puts both lamps back the way they were at the end, or on Ctrl-C.
+set -eu
+
+MAX=60
+A="Bord yderst"
+B="Bord inderst"
+
+# to <lamp> <fade seconds> <hue command> [value], e.g.: to "$A" 3 bri 60
+to() {
+    lamp=$1 secs=$2 cmd=$3
+    shift 3
+    hue --fade "$secs" "$cmd" "$lamp" "$@"
+}
+
+# A lamp's state as "<percent|off> <#hex>", read from its `hue ls` line.
+state() {
+    hue ls stue | grep -Ei "^ +[0-9]+ +$1 " |
+        awk '{ print ($(NF-2) == "on" ? $(NF-1) + 0 : "off"), $NF }'
+}
+
+# level <lamp> <percent|off>
+level() {
+    if [ "$2" = off ]; then to "$1" 2 off; else to "$1" 2 bri "$2"; fi
+}
+
+# Both lamps at once: colors first, as an off lamp can't change color.
+put_back() {
+    set -- $A_WAS $B_WAS
+    to "$A" 2 color "$2"
+    to "$B" 2 color "$4"
+    sleep 2
+    level "$A" "$1"
+    level "$B" "$3"
+}
+
+act() { printf '\n%s\n' "$*"; }
+
+A_WAS=$(state "$A")
+B_WAS=$(state "$B")
+trap 'act "Putting the lamps back"; put_back' EXIT
+trap 'exit 130' INT
+
+act "Lights down"
+to "$A" 1 off
+to "$B" 1 off
+sleep 1.5
+
+act "1. Handoff: $A rises, passes to $B, $B fades away"
+to "$A" 0 bri 1
+to "$A" 3 bri $MAX
+sleep 3
+to "$B" 0 bri $MAX
+to "$A" 0 off
+sleep 0.5
+to "$B" 3 off
+sleep 3
+
+act "2. Ping-pong, faster and faster"
+for pause in 0.8 0.6 0.45 0.3 0.3 0.3; do
+    to "$A" 0 bri $MAX
+    to "$B" 0 off
+    sleep "$pause"
+    to "$B" 0 bri $MAX
+    to "$A" 0 off
+    sleep "$pause"
+done
+
+act "3. Colors, chasing each other"
+to "$A" 0 bri $MAX
+for pair in "ff0000 0066ff" "ff8800 8800ff" "00ff44 ff0088" "0066ff ff0000" "8800ff ff8800"; do
+    set -- $pair
+    to "$A" 1.5 color "$1"
+    to "$B" 1.5 color "$2"
+    sleep 1.5
+done
+
+act "4. Breathing together"
+for _ in 1 2; do
+    to "$A" 2 bri 5
+    to "$B" 2 bri 5
+    sleep 2
+    to "$A" 2 bri $MAX
+    to "$B" 2 bri $MAX
+    sleep 2
+done

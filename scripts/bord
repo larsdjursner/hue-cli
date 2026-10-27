@@ -1,0 +1,45 @@
+#!/bin/sh
+# Fade "Bord yderst" and "Bord inderst" on and off, never above 60%.
+#   bord on [percent]   fade up (default and max 60%)
+#   bord off            fade out
+#   bord                fade up and down until Ctrl-C
+# FADE=<seconds> sets how long each fade takes (default 3).
+set -eu
+
+MAX=60
+FADE=${FADE:-3}
+
+up() {
+    pct=${1:-$MAX}
+    [ "$pct" -gt "$MAX" ] && pct=$MAX
+    for light in "Bord yderst" "Bord inderst"; do
+        # A light that's off would jump to its last brightness first, so start it at 1%.
+        if hue ls stue | grep -Eiq "$light +off"; then
+            hue bri "$light" 1
+        fi
+        hue --fade "$FADE" bri "$light" "$pct"
+    done
+}
+
+down() {
+    for light in "Bord yderst" "Bord inderst"; do
+        hue --fade "$FADE" off "$light"
+    done
+}
+
+case "${1:-loop}" in
+    on) up "${2:-}" ;;
+    off) down ;;
+    loop)
+        while :; do
+            up
+            sleep "$FADE"
+            down
+            sleep "$FADE"
+        done
+        ;;
+    *)
+        echo "usage: bord [on [percent] | off]" >&2
+        exit 2
+        ;;
+esac
